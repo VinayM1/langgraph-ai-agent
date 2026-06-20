@@ -1,9 +1,14 @@
 import streamlit as st
+import sys
+import os
+
+
+sys.path.append(os.path.dirname(__file__))
+
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from agent import agent
 
-import sys, os
-sys.path.append(os.path.dirname(__file__))
+
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="AI Agent",
@@ -75,23 +80,31 @@ for msg in st.session_state.messages:
 user_input = st.chat_input("Ask something...")
 
 if user_input:
-    # Show user message
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_input
+    })
 
     with st.chat_message("user"):
         st.markdown(user_input)
 
-    # Run agent
-    with st.spinner("Thinking..."):
-        result = agent.invoke({
-            "messages": [HumanMessage(content=user_input)],
-            "llm_calls": 0
-        })
+    # ---------- RUN AGENT ----------
+    try:
+        with st.spinner("Thinking..."):
+            result = agent.invoke({
+                "messages": [HumanMessage(content=user_input)],
+                "llm_calls": 0
+            })
+
+    except Exception as e:
+        st.error("⚠️ Something went wrong")
+        st.exception(e)
+        st.stop()
 
     final_answer = ""
     tool_logs = []
 
-    # Process messages
+    # ---------- PROCESS OUTPUT ----------
     for msg in result["messages"]:
         if isinstance(msg, AIMessage):
             if msg.tool_calls:
@@ -104,28 +117,27 @@ if user_input:
         elif isinstance(msg, ToolMessage):
             tool_logs.append(msg.content)
 
-    # Display assistant response
+    # ---------- DISPLAY RESPONSE ----------
     with st.chat_message("assistant"):
         placeholder = st.empty()
 
-        # fake streaming effect
         streamed = ""
         for char in final_answer:
             streamed += char
             placeholder.markdown(streamed)
-        
+
     st.session_state.messages.append({
         "role": "assistant",
         "content": final_answer
     })
 
-    # Show tools
+    # ---------- TOOL LOGS ----------
     if show_tools and tool_logs:
         with st.expander("🔧 Tool Execution Details"):
             for log in tool_logs:
                 st.code(log)
 
-    # Debug panel
+    # ---------- DEBUG ----------
     if show_debug:
         with st.expander("🐞 Debug Data"):
             st.json(result)
