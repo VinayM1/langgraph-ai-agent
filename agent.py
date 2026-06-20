@@ -1,11 +1,14 @@
 import operator
 import os
 
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
 
 import streamlit as st
 
+from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_core.messages import AnyMessage, SystemMessage, ToolMessage
 from langchain_core.tools import tool
@@ -14,38 +17,69 @@ from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 
 
-os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+
+load_dotenv()
+
+
+if "GROQ_API_KEY" in st.secrets:
+    os.environ["GROQ_API_KEY"] = st.secrets["GROQ_API_KEY"]
+
+
 
 # STATE
 class MessagesState(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
     llm_calls: int
 
+
+
 # TOOLS
 @tool
 def add(a: int, b: int) -> int:
+    """Adds a and b.
+
+    Args:
+        a: First int
+        b: Second int
+    """
     return a + b
 
 
 @tool
 def multiply(a: int, b: int) -> int:
+    """Multiplies a and b.
+
+    Args:
+        a: First int
+        b: Second int
+    """
     return a * b
 
 
 @tool
 def divide(a: int, b: int) -> float:
+    """Divides a by b.
+
+    Args:
+        a: First int
+        b: Second int
+    """
     if b == 0:
-        return "Error: division by zero"
+        return 0.0   
     return a / b
 
 
 @tool
 def search_docs(query: str) -> str:
-    """Search knowledge base"""
+    """Search the knowledge base for AI/ML, LangGraph, RAG, embeddings, etc.
+
+    Args:
+        query: The search query describing what information you need
+    """
 
     index_path = os.path.join(os.path.dirname(__file__), "faiss_index")
 
-    
+
     if not os.path.exists(index_path):
         from ingest import main
         main()
@@ -70,6 +104,7 @@ tools = [add, multiply, divide, search_docs]
 tools_by_name = {t.name: t for t in tools}
 
 
+
 # MODEL
 model = ChatGroq(
     model="openai/gpt-oss-20b",
@@ -81,17 +116,19 @@ model_with_tools = model.bind_tools(tools)
 
 # GRAPH NODES
 def llm_call(state: MessagesState) -> dict:
+    """LLM decides whether to call a tool or return a final answer."""
     response = model_with_tools.invoke(
         [
             SystemMessage(
                 content=(
                     "You are a helpful assistant that can perform arithmetic "
                     "and answer questions about AI/ML concepts. "
-                    "Use search_docs for AI questions. "
+                    "Use the search_docs tool when needed. "
                     "Use math tools for calculations."
                 )
             )
-        ] + state["messages"]
+        ]
+        + state["messages"]
     )
 
     return {
@@ -101,6 +138,7 @@ def llm_call(state: MessagesState) -> dict:
 
 
 def tool_node(state: MessagesState) -> dict:
+    """Execute every tool call requested by the LLM."""
     results = []
 
     for tool_call in state["messages"][-1].tool_calls:
@@ -124,7 +162,6 @@ def should_continue(state: MessagesState) -> Literal["tool_node", "__end__"]:
         return "tool_node"
 
     return END
-
 
 
 # BUILD GRAPH
