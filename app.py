@@ -2,6 +2,8 @@ import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from agent import agent
 
+import sys, os
+sys.path.append(os.path.dirname(__file__))
 # ---------- PAGE CONFIG ----------
 st.set_page_config(
     page_title="AI Agent",
